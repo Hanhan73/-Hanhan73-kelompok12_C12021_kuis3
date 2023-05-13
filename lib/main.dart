@@ -1,125 +1,294 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:http/http.dart' as http;
 
 void main() {
-  runApp(const MyApp());
+  runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'My App P2P',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a blue toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
+        primarySwatch: Colors.blue,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: BlocProvider(
+        create: (context) => JenisPinjamanCubit(),
+        child: JenisPinjamanPage(),
+      ),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+class JenisPinjamanCubit extends Cubit<JenisPinjamanState> {
+  int? selectedJenis;
+  String? selectedJenisText;
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
+  JenisPinjamanCubit()
+      : selectedJenis = 1,
+        selectedJenisText = 'Pilih Jenis Pinjaman',
+        super(JenisPinjamanInitial());
 
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
+  void updateSelectedJenis(int jenis) {
+    selectedJenis = jenis;
+    selectedJenisText = _getSelectedJenisPinjamanText(jenis);
+    emit(JenisPinjamanUpdated(jenis));
+  }
 
-  final String title;
+  Future<void> fetchJenisPinjaman(int jenis) async {
+    emit(JenisPinjamanLoading());
+    try {
+      final response = await http
+          .get(Uri.parse('http://178.128.17.76:8000/jenis_pinjaman/$jenis'));
+      print(response.body);
+      if (response.statusCode == 200) {
+        final jsonData = json.decode(response.body);
+        if (jsonData.containsKey('data')) {
+          final dataList = jsonData['data'];
+          if (dataList is List<dynamic>) {
+            final jenisPinjaman =
+                dataList.map((data) => JenisPinjaman.fromJson(data)).toList();
+            emit(JenisPinjamanLoaded(jenisPinjaman));
+          } else {
+            emit(JenisPinjamanError('Invalid JSON data'));
+          }
+        } else {
+          emit(JenisPinjamanError('Invalid JSON data'));
+        }
+      } else {
+        emit(JenisPinjamanError('Failed to load jenis pinjaman'));
+      }
+    } catch (e) {
+      emit(JenisPinjamanError(e.toString()));
+    }
+  }
 
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  Future<void> fetchDetilJenisPinjaman(String id) async {
+    emit(JenisPinjamanLoadingDetil());
+    try {
+      final response = await http
+          .get(Uri.parse('http://178.128.17.76:8000/detil_jenis_pinjaman/$id'));
+      if (response.statusCode == 200) {
+        final jsonData = json.decode(response.body);
+        final detilJenisPinjaman = DetilJenisPinjaman.fromJson(jsonData);
+        emit(JenisPinjamanLoadedDetil(detilJenisPinjaman));
+      } else {
+        emit(JenisPinjamanError('Failed to load detil jenis pinjaman'));
+      }
+    } catch (e) {
+      emit(JenisPinjamanError(e.toString()));
+    }
+  }
+
+  String _getSelectedJenisPinjamanText(int jenis) {
+    if (jenis == 1) {
+      return 'Jenis Pinjaman 1';
+    } else if (jenis == 2) {
+      return 'Jenis Pinjaman 2';
+    } else if (jenis == 3) {
+      return 'Jenis Pinjaman 3';
+    }
+    return '';
+  }
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+@override
+class JenisPinjamanUpdated extends JenisPinjamanState {
+  final int jenis;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  JenisPinjamanUpdated(this.jenis);
+}
+
+abstract class JenisPinjamanState {}
+
+class JenisPinjamanInitial extends JenisPinjamanState {}
+
+class JenisPinjamanLoading extends JenisPinjamanState {}
+
+class JenisPinjamanError extends JenisPinjamanState {
+  final String message;
+
+  JenisPinjamanError(this.message);
+}
+
+class JenisPinjamanLoaded extends JenisPinjamanState {
+  final List<JenisPinjaman> jenisPinjaman;
+
+  JenisPinjamanLoaded(this.jenisPinjaman);
+}
+
+class JenisPinjamanLoadingDetil extends JenisPinjamanState {}
+
+class JenisPinjamanLoadedDetil extends JenisPinjamanState {
+  final DetilJenisPinjaman detilJenisPinjaman;
+
+  JenisPinjamanLoadedDetil(this.detilJenisPinjaman);
+}
+
+class JenisPinjamanPage extends StatefulWidget {
+  @override
+  _JenisPinjamanPageState createState() => _JenisPinjamanPageState();
+}
+
+class _JenisPinjamanPageState extends State<JenisPinjamanPage> {
+  String? selectedJenisPinjaman;
+  late JenisPinjamanCubit jenisPinjamanCubit;
+
+  String _getSelectedJenisPinjamanText() {
+    if (jenisPinjamanCubit.selectedJenisText != null) {
+      return jenisPinjamanCubit.selectedJenisText!;
+    }
+    return 'Pilih jenis pinjaman';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    jenisPinjamanCubit = BlocProvider.of<JenisPinjamanCubit>(context);
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
+        appBar: AppBar(
+          title: Text('My App P2P'),
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Text(
+                  '2105879, Farhan Muzhaffar Tiras Putra; 2100991, Khana Yusdiana; Saya berjanji tidak akan curang atau membantu orang lain berbuat curang'),
+              SizedBox(height: 20),
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: DropdownButton<int>(
+                  value: jenisPinjamanCubit.selectedJenis,
+                  hint: Text(_getSelectedJenisPinjamanText()),
+                  onChanged: (value) {
+                    jenisPinjamanCubit.updateSelectedJenis(value!);
+                    jenisPinjamanCubit.fetchJenisPinjaman(value);
+                  },
+                  items: [
+                    DropdownMenuItem<int>(
+                      value: 1,
+                      child: Text('Jenis Pinjaman 1'),
+                    ),
+                    DropdownMenuItem<int>(
+                      value: 2,
+                      child: Text('Jenis Pinjaman 2'),
+                    ),
+                    DropdownMenuItem<int>(
+                      value: 3,
+                      child: Text('Jenis Pinjaman 3'),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: 16),
+              BlocBuilder<JenisPinjamanCubit, JenisPinjamanState>(
+                builder: (context, state) {
+                  if (state is JenisPinjamanLoading) {
+                    return Center(
+                      child: CircularProgressIndicator(),
+                    );
+                  } else if (state is JenisPinjamanError) {
+                    return Center(
+                      child: Text(state.message),
+                    );
+                  } else if (state is JenisPinjamanLoaded) {
+                    return Expanded(
+                      child: ListView.builder(
+                        itemCount: state.jenisPinjaman.length,
+                        itemBuilder: (context, index) {
+                          final jenisPinjaman = state.jenisPinjaman[index];
+                          return ListTile(
+                            title: Text(jenisPinjaman.nama),
+                            subtitle: Text("Id: " + jenisPinjaman.id),
+                            onTap: () {
+                              jenisPinjamanCubit
+                                  .fetchDetilJenisPinjaman(jenisPinjaman.id);
+                            },
+                          );
+                        },
+                      ),
+                    );
+                  } else if (state is JenisPinjamanLoadingDetil) {
+                    return Center(
+                      child: CircularProgressIndicator(),
+                    );
+                  } else if (state is JenisPinjamanLoadedDetil) {
+                    final detilJenisPinjaman = state.detilJenisPinjaman;
+                    return Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Detil Jenis Pinjaman',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Text('ID: ${detilJenisPinjaman.id}'),
+                          SizedBox(height: 8),
+                          Text('Nama: ${detilJenisPinjaman.nama}'),
+                          SizedBox(height: 8),
+                          Text('Bunga: ${detilJenisPinjaman.bunga}'),
+                          SizedBox(height: 8),
+                          Text('Syariah: ${detilJenisPinjaman.is_syariah}'),
+                        ],
+                      ),
+                    );
+                  } else {
+                    return Container();
+                  }
+                },
+              ),
+            ],
+          ),
+        ));
+  }
+}
+
+class JenisPinjaman {
+  final String id;
+  final String nama;
+
+  JenisPinjaman({required this.id, required this.nama});
+
+  factory JenisPinjaman.fromJson(Map<String, dynamic> json) {
+    return JenisPinjaman(
+      id: json['id'],
+      nama: json['nama'],
+    );
+  }
+}
+
+class DetilJenisPinjaman {
+  final String id;
+  final String nama;
+  final String bunga;
+  final String is_syariah;
+
+  DetilJenisPinjaman(
+      {required this.id,
+      required this.nama,
+      required this.bunga,
+      required this.is_syariah});
+
+  factory DetilJenisPinjaman.fromJson(Map<String, dynamic> json) {
+    return DetilJenisPinjaman(
+      id: json['id'],
+      nama: json['nama'],
+      bunga: json['bunga'],
+      is_syariah: json['is_syariah'],
     );
   }
 }
