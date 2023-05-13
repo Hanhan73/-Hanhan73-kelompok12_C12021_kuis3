@@ -92,7 +92,7 @@ class JenisPinjamanCubit extends Cubit<JenisPinjamanState> {
     } else if (jenis == 3) {
       return 'Jenis Pinjaman 3';
     }
-    return '';
+    return 'Pilih jenis pinjaman';
   }
 }
 
